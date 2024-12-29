@@ -540,8 +540,7 @@ always@(posedge vgaClock, negedge reset) begin
 			Blue <= 4'h0;
 		
 		end 	
-			
-
+		
 		
 	end
 end
