@@ -541,8 +541,7 @@ always@(posedge vgaClock, negedge reset) begin
 		
 		end 	
 			
-			
-			
+
 		
 	end
 end
