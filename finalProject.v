@@ -8,18 +8,19 @@ output H_SYNC, V_SYNC;
 output [3:0] Red; output [3:0] Green; output [3:0] Blue;
 
 wire [2:0] gamePeriod;
-wire dotClock, keypadClock, vgaClock;
+wire dotClock, keypadClock, vgaClock, gamePeriodClock;
 wire [17:0] state_flat;
+wire [1:0] connecter;
+wire [2:0] whereConnected;
 wire hasPush;
 
-divFreq dFImp(.clock(clock), .reset(reset), .dotClock(dotClock), .keypadClock(keypadClock), .vgaClock(vgaClock));
+divFreq dFImp(.clock(clock), .reset(reset), .dotClock(dotClock), .keypadClock(keypadClock), .vgaClock(vgaClock), .gamePeriodClock(gamePeriodClock));
+
+gamePeriodController gPCImp(.gamePeriodClock(gamePeriodClock), .reset(reset), .state_flat(state_flat), .gamePeriod(gamePeriod), .someOne(connecter), .whereConnected(whereConnected));
 
 keypadCheck kCImp(.keypadClock(keypadClock), .reset(reset), .keypadCol(keypadCol), .keypadRow(keypadRow), .state_flat(state_flat), .hasPush(hasPush));
 
-connectLineCheck cLImp(.state_flat(state_flat), .sDoneOut(sevenDisplayOne), .sDtwoOut(sevenDisplayTwo));
-
-vga vgaImp(.vgaClock(vgaClock), .reset(reset), .state_flat(state_flat), ,gamePeriod(gamePeriod), .H_SYNC(H_SYNC), .V_SYNC(V_SYNC), .Red(Red), .Green(Green), .Blue(Blue));
-
+vga vgaImp(.vgaClock(vgaClock), .reset(reset), .state_flat(state_flat), .gamePeriod(gamePeriod), .whereConnected(whereConnected), .H_SYNC(H_SYNC), .V_SYNC(V_SYNC), .Red(Red), .Green(Green), .Blue(Blue));
 
 endmodule
 
@@ -27,18 +28,21 @@ endmodule
 `define DotTimeExpire 2500
 `define KeypadTimeExpire 250000
 `define VgaTimeExpire 1
+`define gamePeriodTimeExpire 12500000
 
-module divFreq(clock, reset, dotClock, keypadClock, vgaClock);
+module divFreq(clock, reset, dotClock, keypadClock, vgaClock, gamePeriodClock);
 input clock, reset;
-output reg dotClock, keypadClock, vgaClock;
+output reg dotClock, keypadClock, vgaClock, gamePeriodClock;
 reg [11:0] dotCounter;
 reg [19:0] keypadCounter;
+reg [27:0] gamePeriodCounter; 
 
 always@(posedge clock) begin
 	if (!reset) begin
 		dotCounter <= 12'd0;
 		keypadCounter <= 20'd0;
 		vgaClock <= 1'b0;
+		gamePeriodCounter <= 28'd0;
 	end
 	else begin
 		if (dotCounter == `DotTimeExpire) begin
@@ -59,11 +63,170 @@ always@(posedge clock) begin
 			vgaClock <= 1'b0;
 		else
 			vgaClock <= 1'b1;
+			
+		if (gamePeriodCounter == `gamePeriodTimeExpire) begin
+			gamePeriodCounter <= 28'd0;
+			gamePeriodClock <= ~gamePeriodClock;
+		end
+		else 
+			gamePeriodCounter <= gamePeriodCounter + 28'd1;
 	end
 end
 endmodule
  
+ 
+ 
+ 
+ 
+ 
+ 
+`define gameControllTimeExpire 10
 
+module gamePeriodController(gamePeriodClock, reset, state_flat, gamePeriod, someOne, whereConnected);
+input gamePeriodClock, reset;
+input [17:0] state_flat;
+output reg [2:0] gamePeriod;
+/** Record whether is O or X connect line. */
+output reg [1:0] someOne;
+output reg [2:0] whereConnected;
+
+reg [2:0] gamePeriodCounter;
+reg [1:0] state [0:8];
+
+reg [2:0] pointOfCircle;
+reg [2:0] pointOfCross;
+
+always@(posedge gamePeriodClock, negedge reset)begin
+	if (!reset) begin
+		gamePeriodCounter <= 3'd0;
+		gamePeriod <= 3'd0;
+		
+	end
+	else begin
+		case(gamePeriod)
+			3'd0: begin
+				if (gamePeriodCounter == `gameControllTimeExpire) begin
+					gamePeriod <= 3'd1;
+					gamePeriodCounter <= 3'd0;
+				end
+				else begin
+					gamePeriodCounter <= gamePeriodCounter + 3'd1;
+				end
+			
+			end
+			3'd1: begin
+				state[0] <= state_flat[1:0];
+				state[1] <= state_flat[3:2];
+				state[2] <= state_flat[5:4];
+				state[3] <= state_flat[7:6];
+				state[4] <= state_flat[9:8];
+				state[5] <= state_flat[11:10];
+				state[6] <= state_flat[13:12];
+				state[7] <= state_flat[15:14];
+				state[8] <= state_flat[17:16];
+				
+				if ((state[0] == state[1] && state[1] == state[2]) && state[0] != 2'd0) begin
+					someOne <= state[0];
+					gamePeriod <= 3'd2;
+					whereConnected <= 3'd0;
+				end
+				else if ((state[3] == state[4] && state[4] == state[5]) && state[3] != 2'd0) begin
+					someOne <= state[3];
+					gamePeriod <= 3'd2;
+					whereConnected <= 3'd1;
+				end
+				else if ((state[6] == state[7] && state[7] == state[8]) && state[6] != 2'd0) begin
+					someOne <= state[6];
+					gamePeriod <= 3'd2;
+					whereConnected <= 3'd3;
+				end
+				else if ((state[0] == state[3] && state[3] == state[6]) && state[0] != 2'd0) begin
+					someOne <= state[0];
+					gamePeriod <= 3'd2;
+					whereConnected <= 3'd4;
+				end
+				else if ((state[1] == state[4] && state[4] == state[7]) && state[1] != 2'd0) begin
+					someOne <= state[1];
+					gamePeriod <= 3'd2;
+					whereConnected <= 3'd5;
+				end
+				else if ((state[2] == state[5] && state[5] == state[8]) && state[2] != 2'd0) begin
+					someOne <= state[2];
+					gamePeriod <= 3'd2;
+					whereConnected <= 3'd6;
+				end
+				else if ((state[0] == state[4] && state[4] == state[8]) && state[0] != 2'd0) begin
+					someOne <= state[0];
+					gamePeriod <= 3'd2;
+					whereConnected <= 3'd7;
+						
+				end 
+				else if ((state[2] == state[4] && state[4] == state[6]) && state[2] != 2'd0) begin
+					someOne <= state[2];
+					gamePeriod <= 3'd2;
+					whereConnected <= 3'd8;	
+				end else
+					gamePeriod <= gamePeriod;
+			
+			end
+			3'd2: begin
+				if (gamePeriodCounter == `gameControllTimeExpire) begin
+					gamePeriodCounter <= 3'd0;
+					
+					if (someOne == 2'd1) begin
+						if (pointOfCircle == 2'd2) begin
+							gamePeriod <= 3'd3;
+							
+						end
+						else begin
+							pointOfCircle <= pointOfCircle + 2'd1;
+							
+						end
+					end
+					else begin
+						if (pointOfCross == 2'd2) begin
+							gamePeriod <= 3'd3;
+							
+						end
+						else begin
+							pointOfCross <= pointOfCross + 2'd1;
+					
+						end
+					end
+				end
+				else begin
+					gamePeriodCounter <= gamePeriodCounter + 3'd1;
+				end
+			
+			end
+			3'd3: begin
+				gamePeriod <= gamePeriod;
+			
+			end
+			default: begin
+				gamePeriod <= 3'd0;
+			
+			end
+		endcase
+	end
+end
+
+
+
+endmodule
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
 
 module keypadCheck(keypadClock, reset, keypadCol, keypadRow, state_flat, hasPush);
 input keypadClock, reset;
@@ -102,15 +265,15 @@ always@(posedge keypadClock, negedge reset) begin
 	if (!reset) begin
 		target = 1'b1;
 		keypadRow <= 2'b0;
-		state[0] <= 2'b00;
-		state[1] <= 2'b00;
-		state[2] <= 2'b00;
-		state[3] <= 2'b00;
-		state[4] <= 2'b00;
-		state[5] <= 2'b00;
-		state[6] <= 2'b00;
-		state[7] <= 2'b00;
-		state[8] <= 2'b00;
+		state[0] <= 2'b0;
+		state[1] <= 2'b0;
+		state[2] <= 2'b0;
+		state[3] <= 2'b0;
+		state[4] <= 2'b0;
+		state[5] <= 2'b0;
+		state[6] <= 2'b0;
+		state[7] <= 2'b0;
+		state[8] <= 2'b0;
 		
 		/*for (int i = 0; i < 100; i++)
 			queue[i] <= 2'd0;*/
@@ -306,15 +469,22 @@ assign state_flat = {state[8], state[7], state[6], state[5], state[4], state[3],
 endmodule 
  
 
+
+ 
+
+ 
  
  
  
 
+ 
 
-module vga(vgaClock, reset, state_flat, gamePeriod, H_SYNC, V_SYNC, Red, Green, Blue);
+
+module vga(vgaClock, reset, state_flat, gamePeriod, whereConnected, H_SYNC, V_SYNC, Red, Green, Blue);
 input vgaClock, reset;
 input [17:0] state_flat;
 input [2:0] gamePeriod;
+input [2:0] whereConnected;
 output reg H_SYNC;
 output reg V_SYNC;
 output reg [3:0] Red;
@@ -342,15 +512,15 @@ always@(posedge vgaClock, negedge reset) begin
 	end
 	else begin
 		/** Unzip the state_flat to state. Since can't pass state between module without systemverilog? */
-		state[0] = state_flat[1:0];
-		state[1] = state_flat[3:2];
-		state[2] = state_flat[5:4];
-		state[3] = state_flat[7:6];
-		state[4] = state_flat[9:8];
-		state[5] = state_flat[11:10];
-		state[6] = state_flat[13:12];
-		state[7] = state_flat[15:14];
-		state[8] = state_flat[17:16];
+		state[0] <= state_flat[1:0];
+		state[1] <= state_flat[3:2];
+		state[2] <= state_flat[5:4];
+		state[3] <= state_flat[7:6];
+		state[4] <= state_flat[9:8];
+		state[5] <= state_flat[11:10];
+		state[6] <= state_flat[13:12];
+		state[7] <= state_flat[15:14];
+		state[8] <= state_flat[17:16];
 	
 		/** HCounter and VCounter count and recount. */
 		if (HCounter == HAllPeriod - 10'd1) begin
@@ -380,7 +550,7 @@ always@(posedge vgaClock, negedge reset) begin
 			
 		/** Determine if this period can display. */
 		/** A 480*480 pixel square. */
-		if (HCounter >= HStartDisplay +80 && HCounter < HEndDisplay - 80) begin
+		if (HCounter >= HStartDisplay + 80 && HCounter < HEndDisplay - 80) begin
 			if (VCounter >= VStartDisplay && VCounter < VEndDisplay)
 				displayState <= 1'd1;
 			else 
@@ -421,11 +591,14 @@ wire [3:0] index = row * GRID_COLS + col;
 wire [9:0] local_x = h_mod - (col * CELL_SIZE); 
 wire [9:0] local_y = v_mod - (row * CELL_SIZE);
 
+
+parameter gameStartCol = 64;
+parameter gameStartRow = 160;
+
 parameter CELL_THICKNESS = 4;
 parameter CELL_OFFSET = 15;
 
 
-	
 always@(posedge vgaClock, negedge reset) begin	
 	if (!reset) begin
 		Red <= 4'h0;
@@ -435,68 +608,119 @@ always@(posedge vgaClock, negedge reset) begin
 	end
 	else begin
 		if (displayState) begin
-			if ((HCounter - HStartDisplay >= OFFSET_X + CELL_SIZE - CELL_THICKNESS/2 && HCounter - HStartDisplay <= OFFSET_X + CELL_SIZE + CELL_THICKNESS/2) ||
-            (HCounter - HStartDisplay >= OFFSET_X + 2 * CELL_SIZE - CELL_THICKNESS/2 && HCounter - HStartDisplay <= OFFSET_X + 2 * CELL_SIZE + CELL_THICKNESS/2)) begin
-				// 加粗垂直線條
-            Red <= 4'hF;
-            Green <= 4'hF;
-            Blue <= 4'hF;
-			end 
-         else if ((VCounter - VStartDisplay >= CELL_SIZE - CELL_THICKNESS/2 && VCounter - VStartDisplay <= CELL_SIZE + CELL_THICKNESS/2) ||
-                 (VCounter - VStartDisplay >= 2 * CELL_SIZE - CELL_THICKNESS/2 && VCounter - VStartDisplay <= 2 * CELL_SIZE + CELL_THICKNESS/2)) begin
-            // 加粗水平線條
-            Red <= 4'hF;
-				Green <= 4'hF;
-            Blue <= 4'hF;
-         end 
-			else if (col_valid && row_valid) begin
-				case(state[index])
-					2'd1: begin
-						if ((((local_x - CELL_SIZE/2)**2 + (local_y - CELL_SIZE/2)**2) >= (CELL_SIZE/3 - 6)**2) &&
-                     (((local_x - CELL_SIZE/2)**2 + (local_y - CELL_SIZE/2)**2) <= (CELL_SIZE/3 + 6)**2)) begin    
-							Red <= 4'h0; // 綠色
-                     Green <= 4'hf;
-                     Blue <= 4'h0;
-						end else begin
-							Red <= 4'h0;
-							Green <= 4'h0;
-							Blue <= 4'h0;
-						end
-					end
-					2'd2: begin
-						if ((local_x >= local_y - CELL_THICKNESS && local_x <= local_y + CELL_THICKNESS && 
-                       local_x >= CELL_OFFSET && local_y >= CELL_OFFSET && 
-                       local_x < CELL_SIZE - CELL_OFFSET && local_y < CELL_SIZE - CELL_OFFSET) ||
-                       (local_x + local_y >= CELL_SIZE - 1 - CELL_THICKNESS && 
-                       local_x + local_y <= CELL_SIZE - 1 + CELL_THICKNESS &&
-                       local_x >= CELL_OFFSET && local_y >= CELL_OFFSET && 
-                       local_x < CELL_SIZE - CELL_OFFSET && local_y < CELL_SIZE - CELL_OFFSET)) begin
-							Red <= 4'hff;
-                     Green <= 4'hc0;
-                     Blue <= 4'hcb;
-                  end else begin
-							Red <= 4'h0;
-							Green <= 4'h0;
-							Blue <= 4'h0;
-						end
-					end
-					default: begin
-						Red <= 4'h0;
-						Green <= 4'h0;
-						Blue <= 4'h0;
-					end
-				endcase
-			end else begin
-				Red <= 4'h0;
-				Green <= 4'h0;
-				Blue <= 4'h0;	
+		
+			if (gamePeriod == 3'd0) begin
+				/** Show "Welcome to Tic Tac Toc Stage 2 !" */
+				Red <= 4'hf;
+				Green <= 4'hf;
+				Blue <= 4'hf;
+			
+			
+			
 			end
+			else if (gamePeriod == 3'd1 || gamePeriod == 3'd2) begin
+				/** Vertical line. */
+				if ((HCounter - HStartDisplay >= OFFSET_X + CELL_SIZE - CELL_THICKNESS/2 && HCounter - HStartDisplay <= OFFSET_X + CELL_SIZE + CELL_THICKNESS/2) ||
+					(HCounter - HStartDisplay >= OFFSET_X + 2 * CELL_SIZE - CELL_THICKNESS/2 && HCounter - HStartDisplay <= OFFSET_X + 2 * CELL_SIZE + CELL_THICKNESS/2)) begin
+					Red <= 4'hF;
+					Green <= 4'hF;
+					Blue <= 4'hF;
+				end 	/** Horizontal line. */
+				else if ((VCounter - VStartDisplay >= CELL_SIZE - CELL_THICKNESS/2 && VCounter - VStartDisplay <= CELL_SIZE + CELL_THICKNESS/2) ||
+						  (VCounter - VStartDisplay >= 2 * CELL_SIZE - CELL_THICKNESS/2 && VCounter - VStartDisplay <= 2 * CELL_SIZE + CELL_THICKNESS/2)) begin
+					Red <= 4'hF;
+					Green <= 4'hF;
+					Blue <= 4'hF;
+				end 
+				else if (col_valid && row_valid) begin
+					case(state[index])
+						2'd1: begin			/** Circle */
+							if ((((local_x - CELL_SIZE/2)**2 + (local_y - CELL_SIZE/2)**2) >= (CELL_SIZE/3 - 6)**2) &&
+								(((local_x - CELL_SIZE/2)**2 + (local_y - CELL_SIZE/2)**2) <= (CELL_SIZE/3 + 6)**2)) begin    
+								Red <= 4'h0;
+								Green <= 4'hf;
+								Blue <= 4'h0;
+							end else begin
+								Red <= 4'h0;
+								Green <= 4'h0;
+								Blue <= 4'h0;
+							end
+						end
+						2'd2: begin			/** Cross */
+							if ((local_x >= local_y - CELL_THICKNESS && local_x <= local_y + CELL_THICKNESS && 
+								  local_x >= CELL_OFFSET && local_y >= CELL_OFFSET && 
+								  local_x < CELL_SIZE - CELL_OFFSET && local_y < CELL_SIZE - CELL_OFFSET) ||
+								  (local_x + local_y >= CELL_SIZE - 1 - CELL_THICKNESS && 
+								  local_x + local_y <= CELL_SIZE - 1 + CELL_THICKNESS &&
+								  local_x >= CELL_OFFSET && local_y >= CELL_OFFSET && 
+								  local_x < CELL_SIZE - CELL_OFFSET && local_y < CELL_SIZE - CELL_OFFSET)) begin
+								Red <= 4'hff;
+								Green <= 4'hc0;
+								Blue <= 4'hcb;
+							end else begin
+								Red <= 4'h0;
+								Green <= 4'h0;
+								Blue <= 4'h0;
+							end
+						end
+						default: begin
+							Red <= 4'h0;
+							Green <= 4'h0;
+							Blue <= 4'h0;
+						end
+					endcase
+				end
+				
+				/** Someone has connected a line. */
+				if (gamePeriod == 3'd2) begin
+					if ((whereConnected == 3'd0 || whereConnected == 3'd1) || whereConnected == 3'd2) begin
+						if (HCounter >= HStartDisplay + OFFSET_X + 20 && HCounter <= HStartDisplay + OFFSET_X + 460) begin
+							if (VCounter > VStartDisplay + 50 + 160 * whereConnected && VCounter < VStartDisplay + 110 + 160 * whereConnected) begin
+								Red <= 4'hf;
+								Green <= 4'h0;
+								Blue <= 4'h0;
+							end
+							else;
+						end
+						else;
+					end
+					else if (((whereConnected == 3'd3 || whereConnected == 3'd4) || whereConnected == 3'd5) begin
+						if (HCounter >= HStartDisplay + OFFSET_X + 50 + 160 * (whereConnected - 3'd3) && HCounter <= HStartDisplay + OFFSET_X + 110 + 160 * (whereConnected - 3'd3)) begin
+							if (VCounter > VStartDisplay + 20 && VCounter < VStartDisplay + 460) begin
+								Red <= 4'hf;
+								Green <= 4'h0;
+								Blue <= 4'h0;
+							end
+							else;
+						end
+						else;
+					end
+					else;
+				end
+				else begin
+					
+				end
+				
+			end
+			else if (gamePeriod == 3'd3) begin
+				Red <= 4'hf;
+				Green <= 4'h0;
+				Blue <= 4'h0;
+			
+				
+			end
+			else begin
+				Red <= 4'h0;
+				Green <= 4'hf;
+				Blue <= 4'h0;
+			end	
 		end
 		else begin
 			Red <= 4'h0;
 			Green <= 4'h0;
 			Blue <= 4'h0;
 		end
+		
 	end	
 end
 
@@ -505,99 +729,14 @@ endmodule
 
  
  
-connectLineCheck (state_flat, sDoneOut, sDtwoOut, gamePeriod);
-input [17:0] state_flat;
-output reg [6:0] sDoneOut;
-output reg [6:0] sDtwoOut;
-output reg [2:0] gamePeriod;
 
-parameter rowNumber = 3;
-parameter colNumber = 3;
-
-/** for sevenDisplay. */
-reg [3:0] sDoneIn;
-reg [3:0] sDtwoIn;
-initial sDoneIn = 4'd0;
-initial sDtwoIn = 4'd0;
-
-/** Record whether is O or X connect line. */
-reg [4:0] someOne;
-
-always@(state_flat)
-	state[0] = state_flat[1:0];
-	state[1] = state_flat[3:2];
-	state[2] = state_flat[5:4];
-	state[3] = state_flat[7:6];
-	state[4] = state_flat[9:8];
-	state[5] = state_flat[11:10];
-	state[6] = state_flat[13:12];
-	state[7] = state_flat[15:14];
-	state[8] = state_flat[17:16];
-
-	/** brute force.*/
-	for (int i = 0; i < 3; i++) begin
-		if ((state[rowNumber * i] == state[1 + rowNumber * i] && state[1 + rowNumber * i] == state[1 + rowNumber * i)) && state[rowNumber * i] != 2'd0) begin
-			someOne <= state[rowNumber * i];
-			gamePeriod <= 3'd2;
-		
-		end else
-			gamePeriod <= gamePeriod;
-		
-		if ((state[i] == state[colNumber * 1 + i] && state[colNumber * 1 + i] == state[colNumber * 2 + 1]) && state[i] != 2'd0) begin
-			someOne <= state[i];
-			gamePeriod <= 3'd2;
-		
-		end else
-			gamePeriod <= gamePeriod;
-			
-		if ((state[0] == state[4] && state[4] == state[8]) && state[0] != 2'd0) begin
-			someOne <= state[0];
-			gamePeriod <= 3'd2;
-			
-		end else
-			gamePeriod <= gamePeriod;
-			
-		if ((state[2] == state[4] && state[4] == state[6]) && state[2] != 2'd0) begin
-			someOne <= state[2];
-			gamePeriod <= 3'd2;
-			
-		end else
-			gamePeriod <= gamePeriod;
-		
-	end
-
-	if (someOne == 2'd1)
-		sDoneIn <= sDoneIn + 4'd1;
-	else if (someOne == 2'd2)
-		sDtwoIn <= sDtwoIn + 4'd1;
-	else begin
-		sDoneIn <= sDoneIn;
-		sDtwoIn <= sDtwoIn;
-	end
-	
-	case(sDoneIn)
-		4'd0: sDoneOut <= 7'b1000000;
-		4'd1: sDoneOut = 7'b1111001;
-		4'd2: sDoneOut = 7'b0100100;
-		4'd3: sDoneOut = 7'b0110000;
-		default: sDoneOut = 7'b1000000;
-	endcase
-	
-	case(sDtwoIn)
-		4'd0: sDtwoOut = 7'b1000000;
-		4'd1: sDtwoOut = 7'b1111001;
-		4'd2: sDtwoOut = 7'b0100100;
-		4'd3: sDtwoOut = 7'b0110000;
-		default: sDtwoOut = 7'b1000000;
-	endcase
-	
-end
-endmodule
  
+/**
+TODO
+zero state_flat when a line is connected
+find out why can't the red line appear when a line is connected
  
- 
- 
- 
+*/
  
  
  
