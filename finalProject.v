@@ -12,15 +12,17 @@ wire dotClock, keypadClock, vgaClock, gamePeriodClock;
 wire [17:0] state_flat;
 wire [1:0] connecter;
 wire [2:0] whereConnected;
+wire [2:0] pointOfCircle;
+wire [2:0] pointOfCross;
 wire hasPush;
 
 divFreq dFImp(.clock(clock), .reset(reset), .dotClock(dotClock), .keypadClock(keypadClock), .vgaClock(vgaClock), .gamePeriodClock(gamePeriodClock));
 
-gamePeriodController gPCImp(.gamePeriodClock(gamePeriodClock), .reset(reset), .state_flat(state_flat), .gamePeriod(gamePeriod), .someOne(connecter), .whereConnected(whereConnected));
+gamePeriodController gPCImp(.gamePeriodClock(gamePeriodClock), .reset(reset), .state_flat(state_flat), .gamePeriod(gamePeriod), .someOne(connecter), .whereConnected(whereConnected), .pointOfCircle(pointOfCircle), .pointOfCross(pointOfCross));
 
-keypadCheck kCImp(.keypadClock(keypadClock), .reset(reset), .keypadCol(keypadCol), .keypadRow(keypadRow), .state_flat(state_flat), .hasPush(hasPush));
+keypadCheck kCImp(.keypadClock(keypadClock), .reset(reset), .keypadCol(keypadCol), .gamePeriod(gamePeriod),.keypadRow(keypadRow), .state_flat(state_flat), .hasPush(hasPush));
 
-vga vgaImp(.vgaClock(vgaClock), .reset(reset), .state_flat(state_flat), .gamePeriod(gamePeriod), .whereConnected(whereConnected), .H_SYNC(H_SYNC), .V_SYNC(V_SYNC), .Red(Red), .Green(Green), .Blue(Blue));
+vga vgaImp(.vgaClock(vgaClock), .reset(reset), .state_flat(state_flat), .gamePeriod(gamePeriod), .someOne(connecter),.whereConnected(whereConnected), .H_SYNC(H_SYNC), .V_SYNC(V_SYNC), .Red(Red), .Green(Green), .Blue(Blue));
 
 endmodule
 
@@ -80,9 +82,10 @@ endmodule
  
  
  
-`define gameControllTimeExpire 10
-
-module gamePeriodController(gamePeriodClock, reset, state_flat, gamePeriod, someOne, whereConnected);
+`define BeginTimeExpire 10
+`define ConnectedBeforeTimeExpire 7
+`define ConnectedAfterTimeExpire 7
+module gamePeriodController(gamePeriodClock, reset, state_flat, gamePeriod, someOne, whereConnected, pointOfCircle, pointOfCross);
 input gamePeriodClock, reset;
 input [17:0] state_flat;
 output reg [2:0] gamePeriod;
@@ -90,31 +93,33 @@ output reg [2:0] gamePeriod;
 output reg [1:0] someOne;
 output reg [2:0] whereConnected;
 
-reg [2:0] gamePeriodCounter;
+reg [3:0] gamePeriodCounter;
 reg [1:0] state [0:8];
 
-reg [2:0] pointOfCircle;
-reg [2:0] pointOfCross;
+output reg [2:0] pointOfCircle;
+output reg [2:0] pointOfCross;
+
+parameter Begin = 3'd0, Playing = 3'd1, ConnectedBefore = 3'd2, ConnectedAfter = 3'd3, Win = 3'd4;
 
 always@(posedge gamePeriodClock, negedge reset)begin
 	if (!reset) begin
-		gamePeriodCounter <= 3'd0;
-		gamePeriod <= 3'd0;
+		gamePeriodCounter <= 4'd0;
+		gamePeriod <= Begin;
 		
 	end
 	else begin
 		case(gamePeriod)
-			3'd0: begin
-				if (gamePeriodCounter == `gameControllTimeExpire) begin
-					gamePeriod <= 3'd1;
-					gamePeriodCounter <= 3'd0;
+			Begin: begin
+				if (gamePeriodCounter == `BeginTimeExpire) begin
+					gamePeriod <= Playing;
+					gamePeriodCounter <= 4'd0;
 				end
 				else begin
-					gamePeriodCounter <= gamePeriodCounter + 3'd1;
+					gamePeriodCounter <= gamePeriodCounter + 4'd1;
 				end
 			
 			end
-			3'd1: begin
+			Playing: begin
 				state[0] <= state_flat[1:0];
 				state[1] <= state_flat[3:2];
 				state[2] <= state_flat[5:4];
@@ -127,80 +132,97 @@ always@(posedge gamePeriodClock, negedge reset)begin
 				
 				if ((state[0] == state[1] && state[1] == state[2]) && state[0] != 2'd0) begin
 					someOne <= state[0];
-					gamePeriod <= 3'd2;
+					gamePeriod <= ConnectedBefore;
 					whereConnected <= 3'd0;
 				end
 				else if ((state[3] == state[4] && state[4] == state[5]) && state[3] != 2'd0) begin
 					someOne <= state[3];
-					gamePeriod <= 3'd2;
+					gamePeriod <= ConnectedBefore;
 					whereConnected <= 3'd1;
 				end
 				else if ((state[6] == state[7] && state[7] == state[8]) && state[6] != 2'd0) begin
 					someOne <= state[6];
-					gamePeriod <= 3'd2;
-					whereConnected <= 3'd3;
+					gamePeriod <= ConnectedBefore;
+					whereConnected <= 3'd2;
 				end
 				else if ((state[0] == state[3] && state[3] == state[6]) && state[0] != 2'd0) begin
 					someOne <= state[0];
-					gamePeriod <= 3'd2;
-					whereConnected <= 3'd4;
+					gamePeriod <= ConnectedBefore;
+					whereConnected <= 3'd3;
 				end
 				else if ((state[1] == state[4] && state[4] == state[7]) && state[1] != 2'd0) begin
 					someOne <= state[1];
-					gamePeriod <= 3'd2;
-					whereConnected <= 3'd5;
+					gamePeriod <= ConnectedBefore;
+					whereConnected <= 3'd4;
 				end
 				else if ((state[2] == state[5] && state[5] == state[8]) && state[2] != 2'd0) begin
 					someOne <= state[2];
-					gamePeriod <= 3'd2;
-					whereConnected <= 3'd6;
+					gamePeriod <= ConnectedBefore;
+					whereConnected <= 3'd5;
 				end
 				else if ((state[0] == state[4] && state[4] == state[8]) && state[0] != 2'd0) begin
 					someOne <= state[0];
-					gamePeriod <= 3'd2;
-					whereConnected <= 3'd7;
+					gamePeriod <= ConnectedBefore;
+					whereConnected <= 3'd6;
 						
 				end 
 				else if ((state[2] == state[4] && state[4] == state[6]) && state[2] != 2'd0) begin
 					someOne <= state[2];
-					gamePeriod <= 3'd2;
-					whereConnected <= 3'd8;	
+					gamePeriod <= ConnectedBefore;
+					whereConnected <= 3'd7;	
 				end else
-					gamePeriod <= gamePeriod;
+					gamePeriod <= Playing;
 			
 			end
-			3'd2: begin
-				if (gamePeriodCounter == `gameControllTimeExpire) begin
-					gamePeriodCounter <= 3'd0;
+			ConnectedBefore: begin
+				if (gamePeriodCounter == `ConnectedBeforeTimeExpire) begin
+					gamePeriodCounter <= 4'd0;
 					
 					if (someOne == 2'd1) begin
 						if (pointOfCircle == 2'd2) begin
-							gamePeriod <= 3'd3;
-							
+							pointOfCircle <= pointOfCircle + 2'd1;
+							gamePeriod <= Win;
+								
 						end
 						else begin
 							pointOfCircle <= pointOfCircle + 2'd1;
-							
+							gamePeriod <= ConnectedAfter;
 						end
 					end
 					else begin
 						if (pointOfCross == 2'd2) begin
-							gamePeriod <= 3'd3;
-							
+							pointOfCross <= pointOfCross + 2'd1;
+							gamePeriod <= Win;
+								
 						end
 						else begin
 							pointOfCross <= pointOfCross + 2'd1;
-					
+							gamePeriod <= ConnectedAfter;
 						end
 					end
+					
 				end
 				else begin
-					gamePeriodCounter <= gamePeriodCounter + 3'd1;
+					gamePeriodCounter <= gamePeriodCounter + 4'd1;
 				end
 			
 			end
-			3'd3: begin
-				gamePeriod <= gamePeriod;
+			ConnectedAfter: begin
+				whereConnected <= 3'd8;
+				if (gamePeriodCounter == `ConnectedAfterTimeExpire) begin
+					gamePeriodCounter <= 4'd0;
+					gamePeriod <= Playing;
+					
+				end
+				else begin
+					gamePeriodCounter <= gamePeriodCounter + 4'd1;
+				end
+				
+			
+			end
+			Win: begin
+			
+			
 			
 			end
 			default: begin
@@ -228,9 +250,10 @@ endmodule
  
  
 
-module keypadCheck(keypadClock, reset, keypadCol, keypadRow, state_flat, hasPush);
+module keypadCheck(keypadClock, reset, keypadCol, gamePeriod, keypadRow, state_flat, hasPush);
 input keypadClock, reset;
 input [3:0] keypadCol;
+input [2:0] gamePeriod;
 output reg [3:0] keypadRow;
 output [17:0] state_flat;
 reg [1:0] state [0:8]; 			/** state has nine 2 bit reg. */
@@ -260,6 +283,8 @@ output reg hasPush; 				/** Record if someone push any button. */
 reg target;							/** Record this is a circle or cross. */
 initial target = 1'b1;			/** In the beginning, the target is cross.*/
 
+parameter Begin = 3'd0, Playing = 3'd1, ConnectedBefore = 3'd2, ConnectedAfter = 3'd3, Win = 3'd4;
+
 integer i;
 always@(posedge keypadClock, negedge reset) begin
 	if (!reset) begin
@@ -284,7 +309,7 @@ always@(posedge keypadClock, negedge reset) begin
 	
 	end
 	else begin
-		
+		case(gamePeriod)
 		/** Detect which button be pushed. And record it is O or X in state.
 		/** If someone push the button, set variable "hasPush" to 1, otherwise, 0.
 		/** If state[j] == 0, it means nothing, so this state can be set to O or X.
@@ -293,174 +318,197 @@ always@(posedge keypadClock, negedge reset) begin
 		/** If rear >= 6, set queue[front] to zero. Front point to the state need to be disappeared,
 		/** rear point to the space need to be write state.
 		*/
-		case(keypadRow)
-			4'b0111: begin
-				case(keypadCol)
+			Playing: begin
+				case(keypadRow)
 					4'b0111: begin
-						hasPush <= 1'b1;
-						if (state[0] == 2'd0) begin
-							state[0] <= target + 2'd1;
-							target <= ~target;
-							queue[rear] <= 4'd0;
-							if (rear >= 3'd6) begin
-								state[queue[front]] <= 2'd0;
-								front <= front + 8'd1;
-							end else
-								front <= front;
-							rear <= rear + 8'd1;
-						end
-						else
-							state[0] <= state[0];
+						case(keypadCol)
+							4'b0111: begin
+								hasPush <= 1'b1;
+								if (state[0] == 2'd0) begin
+									state[0] <= target + 2'd1;
+									target <= ~target;
+									queue[rear] <= 4'd0;
+									if (rear >= 3'd6) begin
+										state[queue[front]] <= 2'd0;
+										front <= front + 8'd1;
+									end else
+										front <= front;
+									rear <= rear + 8'd1;
+								end
+								else
+									state[0] <= state[0];
+							end
+							4'b1011: begin
+								hasPush <= 1'b1;
+								if (state[1] == 2'd0) begin
+									state[1] <= target + 2'd1;
+									target <= ~target;
+									queue[rear] <= 4'd1;
+									if (rear >= 3'd6) begin
+										state[queue[front]] <= 2'd0;
+										front <= front + 8'd1;
+									end else
+										front <= front;
+									rear <= rear + 8'd1;
+								end
+								else
+									state[1] <= state[1];
+							end
+							4'b1101: begin
+								hasPush <= 1'b1;
+								if (state[2] == 2'd0) begin
+									state[2] <= target + 2'd1;
+									target <= ~target;
+									queue[rear] <= 4'd2;
+									if (rear >= 3'd6) begin
+										state[queue[front]] <= 2'd0;
+										front <= front + 8'd1;
+									end else
+										front <= front;
+									rear <= rear + 8'd1;
+								end
+								else
+									state[2] <= state[2];
+							end
+							default: begin
+								hasPush <= 1'b0;
+							end
+						endcase
+						keypadRow <= 4'b1011;
 					end
 					4'b1011: begin
-						hasPush <= 1'b1;
-						if (state[1] == 2'd0) begin
-							state[1] <= target + 2'd1;
-							target <= ~target;
-							queue[rear] <= 4'd1;
-							if (rear >= 3'd6) begin
-								state[queue[front]] <= 2'd0;
-								front <= front + 8'd1;
-							end else
-								front <= front;
-							rear <= rear + 8'd1;
-						end
-						else
-							state[1] <= state[1];
+						case(keypadCol)
+							4'b0111: begin
+								hasPush <= 1'b1;
+								if (state[3] == 2'd0) begin
+									state[3] <= target + 2'd1;
+									target <= ~target;
+									queue[rear] <= 4'd3;
+									if (rear >= 3'd6) begin
+										state[queue[front]] <= 2'd0;
+										front <= front + 8'd1;
+									end else
+										front <= front;
+									rear <= rear + 8'd1;
+								end else
+									state[3] <= state[3];
+							end
+							4'b1011: begin
+								hasPush <= 1'b1;
+								if (state[4] == 2'd0) begin
+									state[4] <= target + 2'd1;
+									target <= ~target;
+									queue[rear] <= 4'd4;
+									if (rear >= 3'd6) begin
+										state[queue[front]] <= 2'd0;
+										front <= front + 8'd1;
+									end else
+										front <= front;
+									rear <= rear + 8'd1;
+								end else
+									state[4] <= state[4];
+							end
+							4'b1101: begin
+								hasPush <= 1'b1;
+								if (state[5] == 2'd0) begin
+									state[5] <= target + 2'd1;
+									target <= ~target;
+									queue[rear] <= 4'd5;
+									if (rear >= 3'd6) begin
+										state[queue[front]] <= 2'd0;
+										front <= front + 8'd1;
+									end else
+										front <= front;
+									rear <= rear + 8'd1;
+								end else
+									state[5] <= state[5];
+							end
+							default: begin
+								hasPush <= 1'b0;
+							end
+						endcase
+						keypadRow <= 4'b1101;
 					end
 					4'b1101: begin
-						hasPush <= 1'b1;
-						if (state[2] == 2'd0) begin
-							state[2] <= target + 2'd1;
-							target <= ~target;
-							queue[rear] <= 4'd2;
-							if (rear >= 3'd6) begin
-								state[queue[front]] <= 2'd0;
-								front <= front + 8'd1;
-							end else
-								front <= front;
-							rear <= rear + 8'd1;
-						end
-						else
-							state[2] <= state[2];
+						case(keypadCol)
+							4'b0111: begin
+								hasPush <= 1'b1;
+								if (state[6] == 2'd0) begin
+									state[6] <= target + 2'd1;
+									target <= ~target;
+									queue[rear] <= 4'd6;
+									if (rear >= 3'd6) begin
+										state[queue[front]] <= 2'd0;
+										front <= front + 8'd1;
+									end else
+										front <= front;
+									rear <= rear + 8'd1;
+								end else
+									state[6] <= state[6];
+							end
+							4'b1011: begin
+								hasPush <= 1'b1;
+								if (state[7] == 2'd0) begin
+									state[7] <= target + 2'd1;
+									target <= ~target;
+									queue[rear] <= 4'd7;
+									if (rear >= 3'd6) begin
+										state[queue[front]] <= 2'd0;
+										front <= front + 8'd1;
+									end else
+										front <= front;
+									rear <= rear + 8'd1;
+								end else
+									state[7] <= state[7];
+							end
+							4'b1101: begin
+								hasPush <= 1'b1;
+								if (state[8] == 2'd0) begin
+									state[8] <= target + 2'd1;
+									target <= ~target;
+									queue[rear] <= 4'd8;
+									if (rear >= 3'd6) begin
+										state[queue[front]] <= 2'd0;
+										front <= front + 8'd1;
+									end else
+										front <= front;
+									rear <= rear + 8'd1;
+								end else
+									state[8] <= state[8];
+							end
+							default: begin
+								hasPush <= 1'b0;
+							end
+						endcase
+						keypadRow <= 4'b0111;
 					end
 					default: begin
-						hasPush <= 1'b0;
+						keypadRow <= 4'b0111;
 					end
 				endcase
-				keypadRow <= 4'b1011;
 			end
-			4'b1011: begin
-				case(keypadCol)
-					4'b0111: begin
-						hasPush <= 1'b1;
-						if (state[3] == 2'd0) begin
-							state[3] <= target + 2'd1;
-							target <= ~target;
-							queue[rear] <= 4'd3;
-							if (rear >= 3'd6) begin
-								state[queue[front]] <= 2'd0;
-								front <= front + 8'd1;
-							end else
-								front <= front;
-							rear <= rear + 8'd1;
-						end else
-							state[3] <= state[3];
-					end
-					4'b1011: begin
-						hasPush <= 1'b1;
-						if (state[4] == 2'd0) begin
-							state[4] <= target + 2'd1;
-							target <= ~target;
-							queue[rear] <= 4'd4;
-							if (rear >= 3'd6) begin
-								state[queue[front]] <= 2'd0;
-								front <= front + 8'd1;
-							end else
-								front <= front;
-							rear <= rear + 8'd1;
-						end else
-							state[4] <= state[4];
-					end
-					4'b1101: begin
-						hasPush <= 1'b1;
-						if (state[5] == 2'd0) begin
-							state[5] <= target + 2'd1;
-							target <= ~target;
-							queue[rear] <= 4'd5;
-							if (rear >= 3'd6) begin
-								state[queue[front]] <= 2'd0;
-								front <= front + 8'd1;
-							end else
-								front <= front;
-							rear <= rear + 8'd1;
-						end else
-							state[5] <= state[5];
-					end
-					default: begin
-						hasPush <= 1'b0;
-					end
-				endcase
-				keypadRow <= 4'b1101;
+			ConnectedAfter: begin
+				target = 1'b1;
+				keypadRow <= 2'b0;
+				state[0] <= 2'b0;
+				state[1] <= 2'b0;
+				state[2] <= 2'b0;
+				state[3] <= 2'b0;
+				state[4] <= 2'b0;
+				state[5] <= 2'b0;
+				state[6] <= 2'b0;
+				state[7] <= 2'b0;
+				state[8] <= 2'b0;
+				
+				/*for (int i = 0; i < 100; i++)
+					queue[i] <= 2'd0;*/
+				
+				rear <= 3'b0;
+				front <= 3'b0;
+				hasPush <= 1'b0;
 			end
-			4'b1101: begin
-				case(keypadCol)
-					4'b0111: begin
-						hasPush <= 1'b1;
-						if (state[6] == 2'd0) begin
-							state[6] <= target + 2'd1;
-							target <= ~target;
-							queue[rear] <= 4'd6;
-							if (rear >= 3'd6) begin
-								state[queue[front]] <= 2'd0;
-								front <= front + 8'd1;
-							end else
-								front <= front;
-							rear <= rear + 8'd1;
-						end else
-							state[6] <= state[6];
-					end
-					4'b1011: begin
-						hasPush <= 1'b1;
-						if (state[7] == 2'd0) begin
-							state[7] <= target + 2'd1;
-							target <= ~target;
-							queue[rear] <= 4'd7;
-							if (rear >= 3'd6) begin
-								state[queue[front]] <= 2'd0;
-								front <= front + 8'd1;
-							end else
-								front <= front;
-							rear <= rear + 8'd1;
-						end else
-							state[7] <= state[7];
-					end
-					4'b1101: begin
-						hasPush <= 1'b1;
-						if (state[8] == 2'd0) begin
-							state[8] <= target + 2'd1;
-							target <= ~target;
-							queue[rear] <= 4'd8;
-							if (rear >= 3'd6) begin
-								state[queue[front]] <= 2'd0;
-								front <= front + 8'd1;
-							end else
-								front <= front;
-							rear <= rear + 8'd1;
-						end else
-							state[8] <= state[8];
-					end
-					default: begin
-						hasPush <= 1'b0;
-					end
-				endcase
-				keypadRow <= 4'b0111;
-			end
-			default: begin
-				keypadRow <= 4'b0111;
-			end
+			default;
 		endcase
-		
 	end
 end
 
@@ -480,10 +528,11 @@ endmodule
  
 
 
-module vga(vgaClock, reset, state_flat, gamePeriod, whereConnected, H_SYNC, V_SYNC, Red, Green, Blue);
+module vga(vgaClock, reset, state_flat, gamePeriod, someOne,whereConnected, H_SYNC, V_SYNC, Red, Green, Blue);
 input vgaClock, reset;
 input [17:0] state_flat;
 input [2:0] gamePeriod;
+input [1:0] someOne;
 input [2:0] whereConnected;
 output reg H_SYNC;
 output reg V_SYNC;
@@ -599,6 +648,8 @@ parameter CELL_THICKNESS = 4;
 parameter CELL_OFFSET = 15;
 
 
+parameter Begin = 3'd0, Playing = 3'd1, ConnectedBefore = 3'd2, ConnectedAfter = 3'd3, Win = 3'd4;
+
 always@(posedge vgaClock, negedge reset) begin	
 	if (!reset) begin
 		Red <= 4'h0;
@@ -609,7 +660,7 @@ always@(posedge vgaClock, negedge reset) begin
 	else begin
 		if (displayState) begin
 		
-			if (gamePeriod == 3'd0) begin
+			if (gamePeriod == Begin) begin
 				/** Show "Welcome to Tic Tac Toc Stage 2 !" */
 				Red <= 4'hf;
 				Green <= 4'hf;
@@ -618,7 +669,11 @@ always@(posedge vgaClock, negedge reset) begin
 			
 			
 			end
-			else if (gamePeriod == 3'd1 || gamePeriod == 3'd2) begin
+			else if (gamePeriod == Playing || gamePeriod == ConnectedBefore) begin
+				Red <= 4'h0;
+				Green <= 4'h0;
+				Blue <= 4'h0;
+			
 				/** Vertical line. */
 				if ((HCounter - HStartDisplay >= OFFSET_X + CELL_SIZE - CELL_THICKNESS/2 && HCounter - HStartDisplay <= OFFSET_X + CELL_SIZE + CELL_THICKNESS/2) ||
 					(HCounter - HStartDisplay >= OFFSET_X + 2 * CELL_SIZE - CELL_THICKNESS/2 && HCounter - HStartDisplay <= OFFSET_X + 2 * CELL_SIZE + CELL_THICKNESS/2)) begin
@@ -672,10 +727,10 @@ always@(posedge vgaClock, negedge reset) begin
 				end
 				
 				/** Someone has connected a line. */
-				if (gamePeriod == 3'd2) begin
+				if (gamePeriod == ConnectedBefore) begin
 					if ((whereConnected == 3'd0 || whereConnected == 3'd1) || whereConnected == 3'd2) begin
 						if (HCounter >= HStartDisplay + OFFSET_X + 20 && HCounter <= HStartDisplay + OFFSET_X + 460) begin
-							if (VCounter > VStartDisplay + 50 + 160 * whereConnected && VCounter < VStartDisplay + 110 + 160 * whereConnected) begin
+							if (VCounter > VStartDisplay + 70 + 160 * whereConnected && VCounter < VStartDisplay + 90 + 160 * whereConnected) begin
 								Red <= 4'hf;
 								Green <= 4'h0;
 								Blue <= 4'h0;
@@ -684,8 +739,8 @@ always@(posedge vgaClock, negedge reset) begin
 						end
 						else;
 					end
-					else if (((whereConnected == 3'd3 || whereConnected == 3'd4) || whereConnected == 3'd5) begin
-						if (HCounter >= HStartDisplay + OFFSET_X + 50 + 160 * (whereConnected - 3'd3) && HCounter <= HStartDisplay + OFFSET_X + 110 + 160 * (whereConnected - 3'd3)) begin
+					else if ((whereConnected == 3'd3 || whereConnected == 3'd4) || whereConnected == 3'd5) begin
+						if (HCounter >= HStartDisplay + OFFSET_X + 70 + 160 * (whereConnected - 3'd3) && HCounter <= HStartDisplay + OFFSET_X + 90 + 160 * (whereConnected - 3'd3)) begin
 							if (VCounter > VStartDisplay + 20 && VCounter < VStartDisplay + 460) begin
 								Red <= 4'hf;
 								Green <= 4'h0;
@@ -695,19 +750,70 @@ always@(posedge vgaClock, negedge reset) begin
 						end
 						else;
 					end
-					else;
+					else if (whereConnected == 3'd6) begin
+						/** Up left to down right line*/
+						if (HCounter >= HStartDisplay + OFFSET_X + 20 && HCounter <= HStartDisplay + OFFSET_X + 460) begin
+						  if ((VCounter - VStartDisplay) >= (HCounter - HStartDisplay - OFFSET_X - 25) &&
+								(VCounter - VStartDisplay) <= (HCounter - HStartDisplay - OFFSET_X + 25)) begin
+								Red <= 4'hf;
+								Green <= 4'h0;
+								Blue <= 4'h0;
+						  end
+						end else;
+						
+					end
+					else begin
+						/** Up right to down left line*/
+						if (HCounter >= HStartDisplay + OFFSET_X + 20 && HCounter <= HStartDisplay + OFFSET_X + 460) begin
+						  if ((VCounter - VStartDisplay) >= (HStartDisplay + OFFSET_X + 480 - HCounter - 25) &&
+								(VCounter - VStartDisplay) <= (HStartDisplay + OFFSET_X + 480 - HCounter + 25)) begin
+								Red <= 4'hf;
+								Green <= 4'h0;
+								Blue <= 4'h0;
+						  end
+						end else;
+						
+					end
 				end
-				else begin
-					
-				end
-				
+				else;
 			end
-			else if (gamePeriod == 3'd3) begin
-				Red <= 4'hf;
-				Green <= 4'h0;
-				Blue <= 4'h0;
-			
+			else if (gamePeriod == ConnectedAfter) begin
+				case(someOne)
+					2'd1: begin
+						/** Big Circle */
+						if ((((HCounter - HStartDisplay - OFFSET_X - 240) ** 2) + ((VCounter - VStartDisplay - 240) ** 2)) >= (150 ** 2) &&
+							 (((HCounter - HStartDisplay - OFFSET_X - 240) ** 2) + ((VCounter - VStartDisplay - 240) ** 2)) <= (230 ** 2)) begin
+							 Red <= 4'h0;
+							 Green <= 4'hf;
+							 Blue <= 4'h0;
+						end 
+						else begin
+							Red <= 4'h0;
+							Green <= 4'h0;
+							Blue <= 4'h0;
+						end
+					end
+					2'd2: begin
+						/** Big Cross */
+						if (((HCounter - VCounter) >= (HStartDisplay + OFFSET_X + 240 - VStartDisplay - 240 - 25) &&
+							(HCounter - VCounter) <= (HStartDisplay + OFFSET_X + 240 - VStartDisplay - 240 + 25)) ||
+							((HCounter + VCounter) >= (HStartDisplay + OFFSET_X + 240 + VStartDisplay + 240 - 25) &&
+							(HCounter + VCounter) <= (HStartDisplay + OFFSET_X + 240 + VStartDisplay + 240 + 25))) begin
+							 Red <= 4'hf;
+							 Green <= 4'hc;
+							 Blue <= 4'hb;
+						end
+						else begin
+							Red <= 4'h0;
+							Green <= 4'h0;
+							Blue <= 4'h0;
+						end
+					end
+					default;
+						
 				
+				endcase
+			
 			end
 			else begin
 				Red <= 4'h0;
