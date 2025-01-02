@@ -1,8 +1,8 @@
-module finalProject(clock, reset, keypadCol, keypadRow, dotRow, dotCol, sevenDisplayOne, sevenDisplayTwo, H_SYNC, V_SYNC, Red, Green, Blue);
-input clock, reset;
+module finalProject(clock, reset, switch, keypadCol, keypadRow, dotRow, dotCol, sevenDisplayOne, sevenDisplayTwo, H_SYNC, V_SYNC, Red, Green, Blue);
+input clock, reset, switch;
 input [3:0] keypadCol;
 output [3:0] keypadRow;
-output [7:0] dotRow; output [7:0] dotCol;
+output [7:0] dotRow; output [15:0] dotCol;
 output [6:0] sevenDisplayOne; output [6:0] sevenDisplayTwo;
 output H_SYNC, V_SYNC;
 output [3:0] Red; output [3:0] Green; output [3:0] Blue;
@@ -16,7 +16,7 @@ wire [2:0] pointOfCircle;
 wire [2:0] pointOfCross;
 wire hasPush;
 
-divFreq dFImp(.clock(clock), .reset(reset), .dotClock(dotClock), .keypadClock(keypadClock), .vgaClock(vgaClock), .gamePeriodClock(gamePeriodClock));
+divFreq dFImp(.switch(switch), .clock(clock), .reset(reset), .dotClock(dotClock), .keypadClock(keypadClock), .vgaClock(vgaClock), .gamePeriodClock(gamePeriodClock));
 
 gamePeriodController gPCImp(.gamePeriodClock(gamePeriodClock), .reset(reset), .state_flat(state_flat), .gamePeriod(gamePeriod), .someOne(connecter), .whereConnected(whereConnected), .pointOfCircle(pointOfCircle), .pointOfCross(pointOfCross));
 
@@ -24,16 +24,19 @@ keypadCheck kCImp(.keypadClock(keypadClock), .reset(reset), .keypadCol(keypadCol
 
 vga vgaImp(.vgaClock(vgaClock), .reset(reset), .state_flat(state_flat), .gamePeriod(gamePeriod), .someOne(connecter),.whereConnected(whereConnected), .H_SYNC(H_SYNC), .V_SYNC(V_SYNC), .Red(Red), .Green(Green), .Blue(Blue));
 
-endmodule
+sD sDImp(.switch(switch), .sDOneIn(pointOfCross), .sDOneOut(sevenDisplayOne), .sDTwoIn(pointOfCircle), .sDTwoOut(sevenDisplayTwo));
 
+dotMatrix dMImp(.dotClock(dotClock), .reset(reset), .someOne(someOne), .gamePeriod(gamePeriod),.dotRow(dotRow), .dotCol(dotCol));
+
+endmodule
 
 `define DotTimeExpire 2500
 `define KeypadTimeExpire 250000
 `define VgaTimeExpire 1
 `define gamePeriodTimeExpire 12500000
 
-module divFreq(clock, reset, dotClock, keypadClock, vgaClock, gamePeriodClock);
-input clock, reset;
+module divFreq(switch, clock, reset, dotClock, keypadClock, vgaClock, gamePeriodClock);
+input clock, reset, switch;
 output reg dotClock, keypadClock, vgaClock, gamePeriodClock;
 reg [11:0] dotCounter;
 reg [19:0] keypadCounter;
@@ -46,7 +49,7 @@ always@(posedge clock) begin
 		vgaClock <= 1'b0;
 		gamePeriodCounter <= 28'd0;
 	end
-	else begin
+	else if (switch) begin
 		if (dotCounter == `DotTimeExpire) begin
 			dotCounter <= 12'd0;
 			dotClock <= ~dotClock;
@@ -72,6 +75,8 @@ always@(posedge clock) begin
 		end
 		else 
 			gamePeriodCounter <= gamePeriodCounter + 28'd1;
+	end else begin
+		gamePeriodCounter <= 28'd0;
 	end
 end
 endmodule
@@ -82,7 +87,7 @@ endmodule
  
  
  
-`define BeginTimeExpire 10
+`define BeginTimeExpire 15
 `define ConnectedBeforeTimeExpire 7
 `define ConnectedAfterTimeExpire 7
 
@@ -104,6 +109,16 @@ parameter Begin = 3'd0, Playing = 3'd1, ConnectedBefore = 3'd2, ConnectedAfter =
 
 always@(posedge gamePeriodClock, negedge reset)begin
 	if (!reset) begin
+		state[0] <= 2'd0;
+		state[1] <= 2'd0;
+		state[2] <= 2'd0;
+		state[3] <= 2'd0;
+		state[4] <= 2'd0;
+		state[5] <= 2'd0;
+		state[6] <= 2'd0;
+		state[7] <= 2'd0;
+		state[8] <= 2'd0;
+	
 		gamePeriodCounter <= 4'd0;
 		gamePeriod <= Begin;
 		someOne = 2'd0;
@@ -251,9 +266,6 @@ always@(posedge gamePeriodClock, negedge reset)begin
 		endcase
 	end
 end
-
-
-
 endmodule
  
  
@@ -289,10 +301,6 @@ initial begin
 	state[6] = 2'b0;
 	state[7] = 2'b0;
 	state[8] = 2'b0;
-	
-	/*for (int i = 0; i < 100; i++)
-		queue[i] <= 2'd0;*/
-	
 	rear = 3'b0;
 end
 
@@ -663,16 +671,6 @@ parameter gameStartRow = 160;
 parameter CELL_THICKNESS = 4;
 parameter CELL_OFFSET = 15;
 
-// 定义显示区域大小
-parameter SCREEN_WIDTH = 480;
-parameter SCREEN_HEIGHT = 480;
-    
-// "Stage 2" 的坐标和大小（用矩形块表示每个字符）
-parameter CHAR_WIDTH = 20;  // 单个字符宽度
-parameter CHAR_HEIGHT = 30; // 单个字符高度
-parameter OFFSET_XBegin = 180;   // 字符串左上角起点 X 偏移
-parameter OFFSET_YBegin = 200;   // 字符串左上角起点 Y 偏移
-
 
 parameter Begin = 3'd0, Playing = 3'd1, ConnectedBefore = 3'd2, ConnectedAfter = 3'd3, Win = 3'd4;
 
@@ -687,27 +685,100 @@ always@(posedge vgaClock, negedge reset) begin
 		if (displayState) begin
 		
 			if (gamePeriod == Begin) begin
-				/** Show "Stage 2 !" */
+				/** Show "Stage 4 !" */
 				Red = 4'h0;
 				Green = 4'h0;
 				Blue = 4'h0;
 			  
 				// "S"
-				
+				if ((HCounter >= HStartDisplay + OFFSET_X + 20 && HCounter <= OFFSET_X + HStartDisplay + 80) && (VCounter >= VStartDisplay + 200 && VCounter <= VStartDisplay + 220)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 20 && HCounter <= OFFSET_X + HStartDisplay + 80) && (VCounter >= VStartDisplay + 280 && VCounter <= VStartDisplay + 300)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 20 && HCounter <= OFFSET_X + HStartDisplay + 40) && (VCounter >= VStartDisplay + 220 && VCounter <= VStartDisplay + 260)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 40 && HCounter <= OFFSET_X + HStartDisplay + 80) && (VCounter >= VStartDisplay + 240 && VCounter <= VStartDisplay + 260)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 60 && HCounter <= OFFSET_X + HStartDisplay + 80) && (VCounter >= VStartDisplay + 260 && VCounter <= VStartDisplay + 280)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
 			  
 				// "t"
-				 
-				// "a"
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 100 && HCounter <= OFFSET_X + HStartDisplay + 160) && (VCounter >= VStartDisplay + 240 && VCounter <= VStartDisplay + 260)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 120 && HCounter <= OFFSET_X + HStartDisplay + 140) && (VCounter >= VStartDisplay + 200 && VCounter <= VStartDisplay + 300)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 140 && HCounter <= OFFSET_X + HStartDisplay + 160) && (VCounter >= VStartDisplay + 280 && VCounter <= VStartDisplay + 300)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
 				
+				// "a"
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 180 && HCounter <= OFFSET_X + HStartDisplay + 200) && (VCounter >= VStartDisplay + 240 && VCounter <= VStartDisplay + 300)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 200 && HCounter <= OFFSET_X + HStartDisplay + 220) && (VCounter >= VStartDisplay + 240 && VCounter <= VStartDisplay + 260)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 220 && HCounter <= OFFSET_X + HStartDisplay + 240) && (VCounter >= VStartDisplay + 240 && VCounter <= VStartDisplay + 310)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 200 && HCounter <= OFFSET_X + HStartDisplay + 220) && (VCounter >= VStartDisplay + 280 && VCounter <= VStartDisplay + 300)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
 
 				// "g"
-				
-
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 260 && HCounter <= OFFSET_X + HStartDisplay + 280) && (VCounter >= VStartDisplay + 240 && VCounter <= VStartDisplay + 300)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 280 && HCounter <= OFFSET_X + HStartDisplay + 300) && (VCounter >= VStartDisplay + 240 && VCounter <= VStartDisplay + 260)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 300 && HCounter <= OFFSET_X + HStartDisplay + 320) && (VCounter >= VStartDisplay + 240 && VCounter <= VStartDisplay + 380)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 280 && HCounter <= OFFSET_X + HStartDisplay + 300) && (VCounter >= VStartDisplay + 280 && VCounter <= VStartDisplay + 300)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 260 && HCounter <= OFFSET_X + HStartDisplay + 300) && (VCounter >= VStartDisplay + 360 && VCounter <= VStartDisplay + 380)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 260 && HCounter <= OFFSET_X + HStartDisplay + 280) && (VCounter >= VStartDisplay + 340 && VCounter <= VStartDisplay + 360)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
 				// "e"
-
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 340 && HCounter <= OFFSET_X + HStartDisplay + 360) && (VCounter >= VStartDisplay + 200 && VCounter <= VStartDisplay + 300)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 360 && HCounter <= OFFSET_X + HStartDisplay + 380) && (VCounter >= VStartDisplay + 200 && VCounter <= VStartDisplay + 220)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 380 && HCounter <= OFFSET_X + HStartDisplay + 400) && (VCounter >= VStartDisplay + 200 && VCounter <= VStartDisplay + 260)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 360 && HCounter <= OFFSET_X + HStartDisplay + 380) && (VCounter >= VStartDisplay + 240 && VCounter <= VStartDisplay + 260)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 360 && HCounter <= OFFSET_X + HStartDisplay + 400) && (VCounter >= VStartDisplay + 280 && VCounter <= VStartDisplay + 300)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end 
 
 				// "2"
-				
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 420 && HCounter <= OFFSET_X + HStartDisplay + 440) && (VCounter >= VStartDisplay + 200 && VCounter <= VStartDisplay + 260)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 440 && HCounter <= OFFSET_X + HStartDisplay + 450) && (VCounter >= VStartDisplay + 240 && VCounter <= VStartDisplay + 260)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 450 && HCounter <= OFFSET_X + HStartDisplay + 470) && (VCounter >= VStartDisplay + 200 && VCounter <= VStartDisplay + 300)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else;
 			
 			
 			end
@@ -734,7 +805,7 @@ always@(posedge vgaClock, negedge reset) begin
 						2'd1: begin			/** Circle */
 							if ((((local_x - CELL_SIZE/2)**2 + (local_y - CELL_SIZE/2)**2) >= (CELL_SIZE/3 - 6)**2) &&
 								(((local_x - CELL_SIZE/2)**2 + (local_y - CELL_SIZE/2)**2) <= (CELL_SIZE/3 + 6)**2)) begin    
-								Red <= 4'h0;
+								Red <= 4'hf;
 								Green <= 4'hf;
 								Blue <= 4'h0;
 							end else begin
@@ -825,7 +896,7 @@ always@(posedge vgaClock, negedge reset) begin
 						/** Big Circle */
 						if ((((HCounter - HStartDisplay - OFFSET_X - 240) ** 2) + ((VCounter - VStartDisplay - 240) ** 2)) >= (150 ** 2) &&
 							 (((HCounter - HStartDisplay - OFFSET_X - 240) ** 2) + ((VCounter - VStartDisplay - 240) ** 2)) <= (230 ** 2)) begin
-							 Red <= 4'h0;
+							 Red <= 4'hf;
 							 Green <= 4'hf;
 							 Blue <= 4'h0;
 						end 
@@ -851,16 +922,80 @@ always@(posedge vgaClock, negedge reset) begin
 							Blue <= 4'h0;
 						end
 					end
-					default;
+					default:
+						Blue <= 4'hf;
 						
 				
 				endcase
 			
 			end
-			else begin
-				Red <= 4'h0;
-				Green <= 4'hf;
-				Blue <= 4'h0;
+			else begin /** Win */
+				if (someOne == 2'd1) begin
+					if ((((HCounter - (HStartDisplay + OFFSET_X + 120)) ** 2) + 
+						((VCounter - (VStartDisplay + 240)) ** 2)) >= (100 ** 2) &&
+						(((HCounter - (HStartDisplay + OFFSET_X + 120)) ** 2) + 
+						((VCounter - (VStartDisplay + 240)) ** 2)) <= (120 ** 2)) begin
+						  Red <= 4'hf;
+						  Green <= 4'hf;
+						  Blue <= 4'h0;
+					 end 
+					 else begin
+						  Red <= 4'h0;
+						  Green <= 4'h0;
+						  Blue <= 4'h0;
+					 end
+				
+				end else if (someOne == 2'd2) begin
+						if ((((HCounter - VCounter) >= ((HStartDisplay + OFFSET_X + 120) - (VStartDisplay + 240) - 8)) &&
+							((HCounter - VCounter) <= ((HStartDisplay + OFFSET_X + 120) - (VStartDisplay + 240) + 8))) ||
+							(((HCounter + VCounter) >= ((HStartDisplay + OFFSET_X + 120) + (VStartDisplay + 240) - 8)) &&
+							((HCounter + VCounter) <= ((HStartDisplay + OFFSET_X + 120) + (VStartDisplay + 240) + 8)))) begin
+								if (HCounter <= OFFSET_X + HStartDisplay + 240) begin
+									  Red <= 4'hff;
+									  Green <= 4'hc0;
+									  Blue <= 4'hcb; 
+								end else;
+						 end 
+						 else begin
+							  Red <= 4'h0;
+							  Green <= 4'h0;
+							  Blue <= 4'h0;
+						 end	
+				end else
+					Blue <= 4'h0;
+				
+				/** Win */
+				if ((HCounter >= HStartDisplay + OFFSET_X + 260 && HCounter <= OFFSET_X + HStartDisplay + 280) && (VCounter >= VStartDisplay + 200 && VCounter <= VStartDisplay + 280)) begin
+					Red <= 4'hf;
+					Green <= 4'hf; 
+					Blue <= 4'hf;
+				end 
+				else if ((HCounter >= OFFSET_X + HStartDisplay + 260 && HCounter <= OFFSET_X + HStartDisplay + 360) && (VCounter >= VStartDisplay + 260 && VCounter <= VStartDisplay + 280)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= OFFSET_X + HStartDisplay + 300 && HCounter <= OFFSET_X + HStartDisplay + 320) && (VCounter >= VStartDisplay + 225 && VCounter <= VStartDisplay + 280)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 340 && HCounter <= OFFSET_X + HStartDisplay + 360) && (VCounter >= VStartDisplay + 200 && VCounter <= VStartDisplay + 280)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 370 && HCounter <= OFFSET_X + HStartDisplay + 390) && (VCounter >= VStartDisplay + 200 && VCounter <= VStartDisplay + 220)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 370 && HCounter <= OFFSET_X + HStartDisplay + 390) && (VCounter >= VStartDisplay + 240 && VCounter <= VStartDisplay + 280)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 400 && HCounter <= OFFSET_X + HStartDisplay + 420) && (VCounter >= VStartDisplay + 200 && VCounter <= VStartDisplay + 280)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 420 && HCounter <= OFFSET_X + HStartDisplay + 450) && (VCounter >= VStartDisplay + 210 && VCounter <= VStartDisplay + 240)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else if ((HCounter >= HStartDisplay + OFFSET_X + 430 && HCounter <= OFFSET_X + HStartDisplay + 450) && (VCounter >= VStartDisplay + 240 && VCounter <= VStartDisplay + 280)) begin
+					Red <= 4'hf; Green <= 4'hf; Blue <= 4'hf;
+				end
+				else;
+				
 			end	
 		end
 		else begin
@@ -868,8 +1003,7 @@ always@(posedge vgaClock, negedge reset) begin
 			Green <= 4'h0;
 			Blue <= 4'h0;
 		end
-		
-	end	
+	end
 end
 
 endmodule 
@@ -879,15 +1013,113 @@ endmodule
  
 
  
-/**
-TODO
-zero state_flat when a line is connected
-find out why can't the red line appear when a line is connected
+module sD(switch, sDOneIn, sDOneOut, sDTwoIn, sDTwoOut);
+input switch;
+input [2:0] sDOneIn;
+input [2:0] sDTwoIn;
+output reg [7:0] sDOneOut;
+output reg [7:0] sDTwoOut;
+
+always @(sDOneIn, sDTwoIn, switch) begin
+	if (switch) begin
+		case(sDOneIn)
+			2'd0: sDOneOut = 7'b1000000;
+			2'd1: sDOneOut = 7'b1111001;
+			2'd2: sDOneOut = 7'b0100100;
+			2'd3: sDOneOut = 7'b0110000;
+			default: sDOneOut = 7'b1000000;
+		endcase
+		
+		case(sDTwoIn)
+			2'd0: sDTwoOut = 7'b1000000;
+			2'd1: sDTwoOut = 7'b1111001;
+			2'd2: sDTwoOut = 7'b0100100;
+			2'd3: sDTwoOut = 7'b0110000;
+			default: sDTwoOut = 7'b1000000;
+		endcase
+	end else;
+end
+endmodule
  
-*/
  
+module dotMatrix(dotClock, reset, someOne, gamePeriod, dotRow, dotCol);
+input dotClock, reset;
+input [1:0] someOne;
+input [2:0] gamePeriod;
+output reg [7:0] dotRow;
+output reg [15:0] dotCol;
+reg [2:0] rowCount;
  
- 
- 
- 
- 
+always@(posedge dotClock, negedge reset) begin
+	if (!reset) begin
+		rowCount <= 3'd0;
+		dotCol <= 16'b0;
+		dotRow <= 8'b0;
+	
+	end
+	else begin
+		case(gamePeriod)
+			3'd2, 3'd3: begin
+				case(rowCount)
+					3'd1: begin
+						dotRow <= 8'b10111111;
+						dotCol <= 16'b0110011000011000;
+					end
+					3'd2: begin
+						dotRow <= 8'b11011111;
+						dotCol <= 16'b0011110000100100;
+					end
+					3'd3: begin
+						dotRow <= 8'b11101111;
+						dotCol <= 16'b0001100001100110;
+					end
+					3'd4: begin
+						dotRow <= 8'b11110111;
+						dotCol <= 16'b0001100001111100;
+					end
+					3'd5: begin
+						dotRow <= 8'b11110111;
+						dotCol <= 16'b0001100001000010;
+					end
+					3'd6: begin
+						dotRow <= 8'b11111011;
+						dotCol <= 16'b0001100010000001;
+					end
+					default: dotCol <= 16'b0;
+				endcase
+			end
+			3'd4: begin
+				case(rowCount)
+					3'd1: begin
+						dotRow <= 8'b10111111;
+						dotCol <= 16'b1110000000000010;
+					end
+					3'd2: begin
+						dotRow <= 8'b11011111;
+						dotCol <= 16'b1000000000000010;
+					end
+					3'd3: begin
+						dotRow <= 8'b11101111;
+						dotCol <= 16'b1011011111101110;
+					end
+					3'd4: begin
+						dotRow <= 8'b11110111;
+						dotCol <= 16'b1001010110101010;
+					end
+					3'd5: begin
+						dotRow <= 8'b11110111;
+						dotCol <= 16'b1111011111101110;
+					end
+					default: dotCol <= 16'b0;
+				endcase
+			end
+			default: begin
+				dotCol <= 16'b0;
+			end
+		endcase
+		
+		
+		rowCount <= rowCount + 1;
+	end
+end 
+endmodule
