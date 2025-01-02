@@ -85,6 +85,7 @@ endmodule
 `define BeginTimeExpire 10
 `define ConnectedBeforeTimeExpire 7
 `define ConnectedAfterTimeExpire 7
+
 module gamePeriodController(gamePeriodClock, reset, state_flat, gamePeriod, someOne, whereConnected, pointOfCircle, pointOfCross);
 input gamePeriodClock, reset;
 input [17:0] state_flat;
@@ -105,7 +106,10 @@ always@(posedge gamePeriodClock, negedge reset)begin
 	if (!reset) begin
 		gamePeriodCounter <= 4'd0;
 		gamePeriod <= Begin;
-		
+		someOne = 2'd0;
+		pointOfCircle <= 3'd0;
+		pointOfCross <= 3'd0;
+				
 	end
 	else begin
 		case(gamePeriod)
@@ -170,9 +174,11 @@ always@(posedge gamePeriodClock, negedge reset)begin
 					someOne <= state[2];
 					gamePeriod <= ConnectedBefore;
 					whereConnected <= 3'd7;	
-				end else
+				end else begin
 					gamePeriod <= Playing;
-			
+					someOne <= 2'd0;
+				end
+				
 			end
 			ConnectedBefore: begin
 				if (gamePeriodCounter == `ConnectedBeforeTimeExpire) begin
@@ -189,7 +195,7 @@ always@(posedge gamePeriodClock, negedge reset)begin
 							gamePeriod <= ConnectedAfter;
 						end
 					end
-					else begin
+					else if (someOne == 2'd2) begin
 						if (pointOfCross == 2'd2) begin
 							pointOfCross <= pointOfCross + 2'd1;
 							gamePeriod <= Win;
@@ -200,6 +206,8 @@ always@(posedge gamePeriodClock, negedge reset)begin
 							gamePeriod <= ConnectedAfter;
 						end
 					end
+					else
+						gamePeriod <= Playing;
 					
 				end
 				else begin
@@ -208,8 +216,19 @@ always@(posedge gamePeriodClock, negedge reset)begin
 			
 			end
 			ConnectedAfter: begin
-				whereConnected <= 3'd8;
+				
+				
 				if (gamePeriodCounter == `ConnectedAfterTimeExpire) begin
+					state[0] <= 2'd0;
+					state[1] <= 2'd0;
+					state[2] <= 2'd0;
+					state[3] <= 2'd0;
+					state[4] <= 2'd0;
+					state[5] <= 2'd0;
+					state[6] <= 2'd0;
+					state[7] <= 2'd0;
+					state[8] <= 2'd0;
+				
 					gamePeriodCounter <= 4'd0;
 					gamePeriod <= Playing;
 					
@@ -500,9 +519,6 @@ always@(posedge keypadClock, negedge reset) begin
 				state[7] <= 2'b0;
 				state[8] <= 2'b0;
 				
-				/*for (int i = 0; i < 100; i++)
-					queue[i] <= 2'd0;*/
-				
 				rear <= 3'b0;
 				front <= 3'b0;
 				hasPush <= 1'b0;
@@ -647,6 +663,16 @@ parameter gameStartRow = 160;
 parameter CELL_THICKNESS = 4;
 parameter CELL_OFFSET = 15;
 
+// 定义显示区域大小
+parameter SCREEN_WIDTH = 480;
+parameter SCREEN_HEIGHT = 480;
+    
+// "Stage 2" 的坐标和大小（用矩形块表示每个字符）
+parameter CHAR_WIDTH = 20;  // 单个字符宽度
+parameter CHAR_HEIGHT = 30; // 单个字符高度
+parameter OFFSET_XBegin = 180;   // 字符串左上角起点 X 偏移
+parameter OFFSET_YBegin = 200;   // 字符串左上角起点 Y 偏移
+
 
 parameter Begin = 3'd0, Playing = 3'd1, ConnectedBefore = 3'd2, ConnectedAfter = 3'd3, Win = 3'd4;
 
@@ -661,11 +687,27 @@ always@(posedge vgaClock, negedge reset) begin
 		if (displayState) begin
 		
 			if (gamePeriod == Begin) begin
-				/** Show "Welcome to Tic Tac Toc Stage 2 !" */
-				Red <= 4'hf;
-				Green <= 4'hf;
-				Blue <= 4'hf;
-			
+				/** Show "Stage 2 !" */
+				Red = 4'h0;
+				Green = 4'h0;
+				Blue = 4'h0;
+			  
+				// "S"
+				
+			  
+				// "t"
+				 
+				// "a"
+				
+
+				// "g"
+				
+
+				// "e"
+
+
+				// "2"
+				
 			
 			
 			end
@@ -727,7 +769,7 @@ always@(posedge vgaClock, negedge reset) begin
 				end
 				
 				/** Someone has connected a line. */
-				if (gamePeriod == ConnectedBefore) begin
+				if (gamePeriod == ConnectedBefore && someOne != 2'd0) begin
 					if ((whereConnected == 3'd0 || whereConnected == 3'd1) || whereConnected == 3'd2) begin
 						if (HCounter >= HStartDisplay + OFFSET_X + 20 && HCounter <= HStartDisplay + OFFSET_X + 460) begin
 							if (VCounter > VStartDisplay + 70 + 160 * whereConnected && VCounter < VStartDisplay + 90 + 160 * whereConnected) begin
@@ -799,9 +841,9 @@ always@(posedge vgaClock, negedge reset) begin
 							(HCounter - VCounter) <= (HStartDisplay + OFFSET_X + 240 - VStartDisplay - 240 + 25)) ||
 							((HCounter + VCounter) >= (HStartDisplay + OFFSET_X + 240 + VStartDisplay + 240 - 25) &&
 							(HCounter + VCounter) <= (HStartDisplay + OFFSET_X + 240 + VStartDisplay + 240 + 25))) begin
-							 Red <= 4'hf;
-							 Green <= 4'hc;
-							 Blue <= 4'hb;
+							Red <= 4'hff;
+							Green <= 4'hc0;
+							Blue <= 4'hcb;
 						end
 						else begin
 							Red <= 4'h0;
