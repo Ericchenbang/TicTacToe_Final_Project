@@ -14,11 +14,12 @@ wire [1:0] connecter;
 wire [2:0] whereConnected;
 wire [2:0] pointOfCircle;
 wire [2:0] pointOfCross;
+wire [2:0] round;
 wire hasPush;
 
 divFreq dFImp(.switch(switch), .clock(clock), .reset(reset), .dotClock(dotClock), .keypadClock(keypadClock), .vgaClock(vgaClock), .gamePeriodClock(gamePeriodClock));
 
-gamePeriodController gPCImp(.gamePeriodClock(gamePeriodClock), .reset(reset), .state_flat(state_flat), .gamePeriod(gamePeriod), .someOne(connecter), .whereConnected(whereConnected), .pointOfCircle(pointOfCircle), .pointOfCross(pointOfCross));
+gamePeriodController gPCImp(.gamePeriodClock(gamePeriodClock), .reset(reset), .state_flat(state_flat), .round(round),.gamePeriod(gamePeriod), .someOne(connecter), .whereConnected(whereConnected), .pointOfCircle(pointOfCircle), .pointOfCross(pointOfCross));
 
 keypadCheck kCImp(.keypadClock(keypadClock), .reset(reset), .keypadCol(keypadCol), .gamePeriod(gamePeriod),.keypadRow(keypadRow), .state_flat(state_flat), .hasPush(hasPush));
 
@@ -26,7 +27,7 @@ vga vgaImp(.vgaClock(vgaClock), .reset(reset), .state_flat(state_flat), .gamePer
 
 sD sDImp(.switch(switch), .sDOneIn(pointOfCross), .sDOneOut(sevenDisplayOne), .sDTwoIn(pointOfCircle), .sDTwoOut(sevenDisplayTwo));
 
-dotMatrix dMImp(.dotClock(dotClock), .reset(reset), .someOne(someOne), .gamePeriod(gamePeriod),.dotRow(dotRow), .dotCol(dotCol));
+dotMatrix dMImp(.dotClock(dotClock), .reset(reset), .someOne(someOne), .gamePeriod(gamePeriod), .round(round), .dotRow(dotRow), .dotCol(dotCol));
 
 endmodule
 
@@ -91,9 +92,12 @@ endmodule
 `define ConnectedBeforeTimeExpire 7
 `define ConnectedAfterTimeExpire 7
 
-module gamePeriodController(gamePeriodClock, reset, state_flat, gamePeriod, someOne, whereConnected, pointOfCircle, pointOfCross);
+module gamePeriodController(gamePeriodClock, reset, state_flat, round, gamePeriod, someOne, whereConnected, pointOfCircle, pointOfCross);
 input gamePeriodClock, reset;
 input [17:0] state_flat;
+output reg [2:0] round;
+initial round = 3'd1;
+
 output reg [2:0] gamePeriod;
 /** Record whether is O or X connect line. */
 output reg [1:0] someOne;
@@ -124,6 +128,7 @@ always@(posedge gamePeriodClock, negedge reset)begin
 		someOne = 2'd0;
 		pointOfCircle <= 3'd0;
 		pointOfCross <= 3'd0;
+		round <= 3'd1;
 				
 	end
 	else begin
@@ -132,6 +137,7 @@ always@(posedge gamePeriodClock, negedge reset)begin
 				if (gamePeriodCounter == `BeginTimeExpire) begin
 					gamePeriod <= Playing;
 					gamePeriodCounter <= 4'd0;
+					round <= 3'd1;
 				end
 				else begin
 					gamePeriodCounter <= gamePeriodCounter + 4'd1;
@@ -232,7 +238,6 @@ always@(posedge gamePeriodClock, negedge reset)begin
 			end
 			ConnectedAfter: begin
 				
-				
 				if (gamePeriodCounter == `ConnectedAfterTimeExpire) begin
 					state[0] <= 2'd0;
 					state[1] <= 2'd0;
@@ -246,6 +251,7 @@ always@(posedge gamePeriodClock, negedge reset)begin
 				
 					gamePeriodCounter <= 4'd0;
 					gamePeriod <= Playing;
+					round <= round + 3'd1;
 					
 				end
 				else begin
@@ -1042,14 +1048,17 @@ end
 endmodule
  
  
-module dotMatrix(dotClock, reset, someOne, gamePeriod, dotRow, dotCol);
+module dotMatrix(dotClock, reset, someOne, gamePeriod, round, dotRow, dotCol);
 input dotClock, reset;
 input [1:0] someOne;
 input [2:0] gamePeriod;
+input [2:0] round;
 output reg [7:0] dotRow;
 output reg [15:0] dotCol;
 reg [2:0] rowCount;
  
+parameter Begin = 3'd0, Playing = 3'd1, ConnectedBefore = 3'd2, ConnectedAfter = 3'd3, Win = 3'd4; 
+
 always@(posedge dotClock, negedge reset) begin
 	if (!reset) begin
 		rowCount <= 3'd0;
@@ -1059,12 +1068,93 @@ always@(posedge dotClock, negedge reset) begin
 	end
 	else begin
 		case(gamePeriod)
-			3'd2, 3'd3: begin
+			/** Display round */
+			Playing: begin
 				case(rowCount)
 					3'd1: begin
 						dotRow <= 8'b10111111;
-						dotCol <= 16'b0110011000011000;
+						if (round == 3'd1)
+							dotCol <= 16'b0000000000010000;
+						else if (round == 3'd2)
+							dotCol <= 16'b0000000000111100;
+						else if (round == 3'd3)
+							dotCol <= 16'b0000000000111100;
+						else if (round == 3'd4)
+							dotCol <= 16'b0000000000100100;
+						else
+							dotCol <= 16'b0000000000111100;
+					
 					end
+					3'd2: begin
+						dotRow <= 8'b11011111;
+						if (round == 3'd1)
+							dotCol <= 16'b0000000000110000;
+						else if (round == 3'd2)
+							dotCol <= 16'b0000000000100100;
+						else if (round == 3'd3)
+							dotCol <= 16'b0000000000000100;
+						else if (round == 3'd4)
+							dotCol <= 16'b0000000000100100;
+						else
+							dotCol <= 16'b0000000000100000;
+					end
+					3'd3: begin
+						dotRow <= 8'b11101111;
+						if (round == 3'd1)
+							dotCol <= 16'b0000000001010000;
+						else if (round == 3'd2)
+							dotCol <= 16'b0000000000000100;
+						else if (round == 3'd3)
+							dotCol <= 16'b0000000000000100;
+						else if (round == 3'd4)
+							dotCol <= 16'b0000000000100100;
+						else
+							dotCol <= 16'b0000000000111100;
+					end
+					3'd4: begin
+						dotRow <= 8'b11110111;
+						if (round == 3'd1)
+							dotCol <= 16'b0000000000010000;
+						else if (round == 3'd2)
+							dotCol <= 16'b0000000000111100;
+						else if (round == 3'd3)
+							dotCol <= 16'b0000000000111100;
+						else if (round == 3'd4)
+							dotCol <= 16'b0000000000111110;
+						else
+							dotCol <= 16'b0000000000000100;
+					end
+					3'd5: begin
+						dotRow <= 8'b11111011;
+						if (round == 3'd1)
+							dotCol <= 16'b0000000000010000;
+						else if (round == 3'd2)
+							dotCol <= 16'b0000000000100000;
+						else if (round == 3'd3)
+							dotCol <= 16'b0000000000000100;
+						else if (round == 3'd4)
+							dotCol <= 16'b0000000000000100;
+						else
+							dotCol <= 16'b0000000000000100;
+					end
+					3'd6: begin
+						dotRow <= 8'b11111101;
+						if (round == 3'd1)
+							dotCol <= 16'b0000000001111100;
+						else if (round == 3'd2)
+							dotCol <= 16'b0000000000111100;
+						else if (round == 3'd3)
+							dotCol <= 16'b0000000000111100;
+						else if (round == 3'd4)
+							dotCol <= 16'b0000000000000100;
+						else
+							dotCol <= 16'b0000000000111100;
+					
+					end
+					default: begin
+						dotCol <= 16'b0;
+					end
+				endcase˙˙˙
 					3'd2: begin
 						dotRow <= 8'b11011111;
 						dotCol <= 16'b0011110000100100;
@@ -1088,7 +1178,7 @@ always@(posedge dotClock, negedge reset) begin
 					default: dotCol <= 16'b0;
 				endcase
 			end
-			3'd4: begin
+			Win: begin
 				case(rowCount)
 					3'd1: begin
 						dotRow <= 8'b10111111;
@@ -1107,7 +1197,7 @@ always@(posedge dotClock, negedge reset) begin
 						dotCol <= 16'b1001010110101010;
 					end
 					3'd5: begin
-						dotRow <= 8'b11110111;
+						dotRow <= 8'b11111011;
 						dotCol <= 16'b1111011111101110;
 					end
 					default: dotCol <= 16'b0;
